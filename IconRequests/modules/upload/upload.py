@@ -1,9 +1,11 @@
 from os import path
-from IconRequests.utils import convert_svg2png
 from tempfile import NamedTemporaryFile
-from PIL import Image
+from abc import ABCMeta, abstractmethod
+from subprocess import Popen, PIPE
+
 
 class Upload:
+    __metaclass__ = ABCMeta
 
     @property
     def client_id(self):
@@ -13,27 +15,29 @@ class Upload:
     def client_id(self, client_id):
         self._client_id = client_id
 
+    @abstractmethod
+    def upload_icon(self, icon_path, app_name):
+        """Upload the icon."""
 
     def upload(self, icon_path, app_name=None):
         icon_extension = path.splitext(icon_path)[1].lower().strip(".")
-        was_scaled = False
-        if icon_extension in ["svg", "png"]:
+        if icon_extension in ["svg", "png", "xpm"]:
             outfile = NamedTemporaryFile().name
-            if icon_extension == "svg":
-                convert_svg2png(icon_path, outfile, 48, 48)
-                icon_path = outfile
-                was_scaled = True
-                icon_extension = "png"
-            if icon_extension == "png":
-                if not was_scaled:
-                    img = Image.open(icon_path)
-                    img = img.resize((48, 48), Image.ANTIALIAS)
-                    img.save(outfile, "PNG")
-                    icon_path = outfile
-                icon_url = self.upload_icon(icon_path, app_name)
-                return icon_url
+            to_png(icon_path, outfile, 48, 48)
+            icon_path = outfile
+            return self.upload_icon(icon_path, app_name)
         return None
 
-class ConnexionError(Exception):
-    def __init__(self):
-        super(ConnexionError, self).__init__()
+
+def to_png(inputfile, outfile, width, height):
+    """
+        Converts svg/xpm files to png using ImageMagick
+        @file_path : String; the svg file absolute path
+        @dest_path : String; the png file absolute path
+    """
+    cmd = Popen([
+        "convert", "-background", "none",
+        "-resize", "{}x{}".format(str(width), str(height)),
+        inputfile, outfile
+    ], stdout=PIPE, stdin=PIPE)
+    output, error = cmd.communicate()
